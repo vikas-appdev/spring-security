@@ -962,7 +962,7 @@ spring.ldap.embedded.base-dn=dc=springframework,dc=org
 
 - Create a HomeResource 
 
-```
+```java
 @RestController
 public class HomeResource {
 
@@ -976,7 +976,7 @@ public class HomeResource {
 
 - Create SecurityConfiguration 
 
-```
+```java
 package com.example.springsecurityldap;
 
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
