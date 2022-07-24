@@ -428,3 +428,336 @@ protected void configure(AuthenticationManagerBuilder auth) throws Exception {
 
 ## How to do JPA Authentication with Spring Security and MySQL
 
+- create a database with any name for now springsecurity 
+- create user table with id, active, password, roles, username
+
+Create HomeResource with following RestController
+
+```java
+@RestController
+public class HomeResource {
+    @GetMapping("/")
+    public String home(){
+        return ("<h1>Welcome</h1>");
+    }
+
+    @GetMapping("/user")
+    public String user(){
+        return ("<h1>Welcome User</h1>");
+    }
+
+    @GetMapping("/admin")
+    public String admin(){
+        return ("<h1>Welcome Admin</h1>");
+    }
+}
+```
+
+Create SecurityConfiguration class that will extends WebSecurityConfigurerAdapter and override configure method which will take argument as HttpSecurity for Authorization with following code to allow certain urls based on Role and annotation this class with @EnableWebSecurity.
+
+```java
+@EnableWebSecurity
+public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests()
+                .antMatchers("/admin").hasRole("ADMIN")
+                .antMatchers("/user").hasAnyRole("USER", "ADMIN")
+                .antMatchers("/").permitAll()
+                .and().formLogin();
+    }
+
+}
+```
+
+Now we have the authorization setup, it's time to setup the authentication.
+
+#### How do you setup authentication for spring security to connect using JPA to MySQL
+
+There are a bunch of out of the box implementation for authentication that spring security provides, For example if we want to use JDBC authentication, there is a JDBC authentication manager that we can use and tell what the database is and what is query and all other stuffs. 
+
+However for JPA there is no out of the box implementation for Authentication. 
+
+> AuthenticationManager authenticate() talks to AuthenticationProvider authenticate() and that calls UserDetailsService loadUserByUsername(). 
+
+Spring security has a way for you to provide UserDetailsService. You can create UserDetailsService and give it to spring by taking username and by returning the UserObject of type UserDetails. Spring security manage the rest.
+
+In order to have spring security work with JPA whats you need to do is create an instance of this UserDetailsService.
+
+Let's create a hardcoded authentication first, It does not matter UserDetailsService is getting data using JPA or from text file.
+
+> We can make use of userDetailsService() on AuthenticationManager and this method let's us pass user instance, @Autowired the UserDetailsService interface and pass that reference to userDetailsService() like following and create an implementation by creating a new class and make that as Service by annotating with @Service
+
+```java
+@Autowired
+UserDetailsService userDetailsService;
+
+@Override
+protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+	auth.userDetailsService(userDetailsService);
+}
+```
+
+- Create an implementation of UserDetailsService by creating a class MyUserDetailsService that implements UserDetailsService.
+- Override the unimplemented method loadUserByUsername(String username) that will return UserDetails.
+
+MyUserDetailsService.java
+
+```java
+@Service
+public class MyUserDetailsService implements UserDetailsService {
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        return new MyUserDetails(username);
+    }
+}
+```
+
+- Create a class MyUserDetails that will be implementation of UserDetails interface
+- Provide implementation for the un-implemented method by overiding them
+> Spring security takes that those value that we will return from implemented class
+
+```java
+public class MyUserDetails implements UserDetails {
+
+    private String username;
+
+    public MyUserDetails(String username){
+        this.username = username;
+    }
+
+    public MyUserDetails(){
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return Arrays.asList(new SimpleGrantedAuthority("ROLE_USER"));
+    }
+
+    @Override
+    public String getPassword() {
+        return "pass";
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+}
+
+```
+
+- Create a password encoder bean in SecurityConfiguration class by using NoOpPasswordEncoder to use plain text as password 
+
+```java
+@Bean
+public PasswordEncoder getPasswordEncoder(){
+	return NoOpPasswordEncoder.getInstance();
+}
+```
+
+Run the application by commenting jpa and mysql dependency from the pom.xml and it should work fine. Like that we can return user from any source it can be jpa or text file 
+
+Now let's use JPA and find data from database.
+
+- Create a model class User
+
+```java
+@Entity
+@Table(name = "User")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private int id;
+    private String username;
+    private String password;
+    private boolean active;
+    private String roles;
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public String getRoles() {
+        return roles;
+    }
+
+    public void setRoles(String roles) {
+        this.roles = roles;
+    }
+}
+```
+
+MyUserDetails.java
+
+```java
+public class MyUserDetails implements UserDetails {
+
+    private String username;
+    private String password;
+    private boolean active;
+    private List<GrantedAuthority> authorities;
+
+    public MyUserDetails(User user){
+        this.username = user.getUsername();
+        this.password = user.getPassword();
+        this.active = user.isActive();
+        this.authorities = Arrays.stream(user.getRoles().split(","))
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+    }
+
+    public MyUserDetails(){
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+
+    @Override
+    public String getPassword() {
+        return password;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return active;
+    }
+}
+
+```
+
+HomeResource.java
+
+```java
+@RestController
+public class HomeResource {
+    @GetMapping("/")
+    public String home(){
+        return ("<h1>Welcome</h1>");
+    }
+
+    @GetMapping("/user")
+    public String user(){
+        return ("<h1>Welcome User</h1>");
+    }
+
+    @GetMapping("/admin")
+    public String admin(){
+        return ("<h1>Welcome Admin</h1>");
+    }
+}
+```
+
+MyUserDetailsService.java
+
+```java
+@Service
+public class MyUserDetailsService implements UserDetailsService {
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        Optional<User> user = userRepository.findByUsername(username);
+        user.orElseThrow(()-> new UsernameNotFoundException("Not found : "+username));
+        return user.map(MyUserDetails::new).get();
+    }
+}
+```
+
+UserRepository.java
+
+```java
+public interface UserRepository extends JpaRepository<User, Integer> {
+    Optional<User> findByUsername(String username);
+}
+```
+
+application.properties
+
+```
+spring.datasource.url=jdbc:mysql://localhost:3306/springsecuritydemo
+spring.datasource.username=root
+spring.datasource.password=vikas
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.hibernate.naming-strategy=org.hibernate.cfg.ImprovedNamingStrategy
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
+```
+
+
+
+
+
+
