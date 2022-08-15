@@ -1018,3 +1018,22 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 - Now we can start our application and make use of ldif configured username `ben` and password `benspassword`.
 
 
+----------------------------------------------------------------------------------------------
+
+
+## What is JWT authorization
+
+> JWT stands for JSON WEB TOKENS , It is a very popular way of user authorization in web app today.
+
+- RFC 7519 : Which outlines how a jwt should be structured, How to use it for exchanging information
+
+- JWT Focus on Authorization 
+
+#### Authorization strategy
+
+- Session token
+- JSON web token
+
+
+
+
